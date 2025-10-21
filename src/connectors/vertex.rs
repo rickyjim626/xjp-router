@@ -1,3 +1,5 @@
+use eventsource_stream::Eventsource;
+use futures_util::StreamExt;
 use reqwest::{header, Client};
 use serde_json::json;
 use std::time::Duration;
@@ -65,7 +67,7 @@ impl Connector for VertexConnector {
             vision: true,
             video: true,
             tools: false,
-            stream: false,
+            stream: true,
         }
     }
 
@@ -74,7 +76,6 @@ impl Connector for VertexConnector {
         route: &EgressRoute,
         req: UnifiedRequest,
     ) -> Result<ConnectorResponse, ConnectorError> {
-        // Non-streaming minimal implementation (generateContent)
         let project = route
             .project
             .clone()
@@ -86,9 +87,16 @@ impl Connector for VertexConnector {
             .or_else(|| std::env::var("VERTEX_REGION").ok())
             .ok_or_else(|| ConnectorError::Invalid("missing region".into()))?;
         let model = &route.provider_model_id;
+
+        // Choose endpoint based on streaming mode
+        let endpoint = if req.stream {
+            "streamGenerateContent"
+        } else {
+            "generateContent"
+        };
         let url = format!(
-            "https://{}-aiplatform.googleapis.com/v1/projects/{}/locations/{}/{}:generateContent",
-            region, project, region, model
+            "https://{}-aiplatform.googleapis.com/v1/projects/{}/locations/{}/{}:{}",
+            region, project, region, model, endpoint
         );
 
         let (api_key, access_token) = Self::auth_headers()?;
@@ -108,44 +116,114 @@ impl Connector for VertexConnector {
         let mut body = json!({
             "contents": Self::map_messages(&req.messages)
         });
+
+        let mut gen_config = serde_json::Map::new();
         if let Some(t) = req.max_output_tokens {
-            body["generationConfig"] = json!({"maxOutputTokens": t});
+            gen_config.insert("maxOutputTokens".to_string(), json!(t));
         }
         if let Some(t) = req.temperature {
-            body["generationConfig"]["temperature"] = json!(t);
+            gen_config.insert("temperature".to_string(), json!(t));
         }
         if let Some(t) = req.top_p {
-            body["generationConfig"]["topP"] = json!(t);
+            gen_config.insert("topP".to_string(), json!(t));
+        }
+        if !gen_config.is_empty() {
+            body["generationConfig"] = json!(gen_config);
         }
 
-        let resp = rb.json(&body).send().await?;
-        let status = resp.status();
-        if !status.is_success() {
-            let text = resp.text().await.unwrap_or_default();
-            return Err(ConnectorError::Upstream(format!(
-                "status {}: {}",
-                status, text
-            )));
-        }
-        let v: serde_json::Value = resp.json().await?;
-        // Aggregate text
-        let mut text_out = String::new();
-        if let Some(parts) = v
-            .pointer("/candidates/0/content/parts")
-            .and_then(|x| x.as_array())
-        {
-            for p in parts {
-                if let Some(t) = p.get("text").and_then(|x| x.as_str()) {
-                    text_out.push_str(t);
+        if req.stream {
+            // Streaming mode
+            let response = rb
+                .json(&body)
+                .send()
+                .await
+                .map_err(|e| ConnectorError::Upstream(e.to_string()))?;
+
+            let status = response.status();
+            if !status.is_success() {
+                let text = response.text().await.unwrap_or_default();
+                return Err(ConnectorError::Upstream(format!(
+                    "status {}: {}",
+                    status, text
+                )));
+            }
+
+            let stream =
+                response
+                    .bytes_stream()
+                    .eventsource()
+                    .map(|event_result| match event_result {
+                        Ok(event) => {
+                            let data = event.data;
+
+                            // Vertex AI sends JSON chunks in SSE data field
+                            let json_val: serde_json::Value =
+                                serde_json::from_str(&data).unwrap_or_default();
+
+                            // Extract text from candidates[0].content.parts[].text
+                            let mut text_delta = None;
+                            if let Some(parts) = json_val
+                                .pointer("/candidates/0/content/parts")
+                                .and_then(|x| x.as_array())
+                            {
+                                let mut text_out = String::new();
+                                for p in parts {
+                                    if let Some(t) = p.get("text").and_then(|x| x.as_str()) {
+                                        text_out.push_str(t);
+                                    }
+                                }
+                                if !text_out.is_empty() {
+                                    text_delta = Some(text_out);
+                                }
+                            }
+
+                            // Check if this is the final chunk
+                            let done = json_val.pointer("/candidates/0/finishReason").is_some();
+
+                            Ok(UnifiedChunk {
+                                text_delta,
+                                tool_call_delta: None,
+                                done,
+                                provider_events: Some(json_val),
+                            })
+                        }
+                        Err(e) => Err(ConnectorError::Upstream(e.to_string())),
+                    });
+
+            Ok(ConnectorResponse::Streaming(Box::pin(stream)))
+        } else {
+            // Non-streaming mode
+            let resp = rb.json(&body).send().await?;
+            let status = resp.status();
+            if !status.is_success() {
+                let text = resp.text().await.unwrap_or_default();
+                return Err(ConnectorError::Upstream(format!(
+                    "status {}: {}",
+                    status, text
+                )));
+            }
+            let v: serde_json::Value = resp.json().await?;
+
+            // Aggregate text
+            let mut text_out = String::new();
+            if let Some(parts) = v
+                .pointer("/candidates/0/content/parts")
+                .and_then(|x| x.as_array())
+            {
+                for p in parts {
+                    if let Some(t) = p.get("text").and_then(|x| x.as_str()) {
+                        text_out.push_str(t);
+                    }
                 }
             }
+
+            let chunk = UnifiedChunk {
+                text_delta: Some(text_out),
+                tool_call_delta: None,
+                done: true,
+                provider_events: Some(v),
+            };
+            Ok(ConnectorResponse::NonStreaming(chunk))
         }
-        let chunk = UnifiedChunk {
-            text_delta: Some(text_out),
-            tool_call_delta: None,
-            done: true,
-            provider_events: Some(v),
-        };
-        Ok(ConnectorResponse::NonStreaming(chunk))
     }
 }

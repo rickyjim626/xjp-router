@@ -1,3 +1,5 @@
+use eventsource_stream::Eventsource;
+use futures_util::StreamExt;
 use reqwest::{header, Client};
 use serde_json::json;
 use std::time::Duration;
@@ -59,7 +61,7 @@ impl Connector for ClewdrConnector {
             vision: true,
             video: false,
             tools: false,
-            stream: false,
+            stream: true,
         }
     }
 
@@ -72,7 +74,7 @@ impl Connector for ClewdrConnector {
         let mut body = json!({
             "model": route.provider_model_id,
             "messages": Self::map_messages(&req.messages).map_err(|e| ConnectorError::Invalid(e.to_string()))?,
-            "stream": false
+            "stream": req.stream
         });
         if let Some(t) = req.max_output_tokens {
             body["max_tokens"] = json!(t);
@@ -96,27 +98,77 @@ impl Connector for ClewdrConnector {
             rb = rb.bearer_auth(k);
         }
 
-        let resp = rb.json(&body).send().await?;
-        let status = resp.status();
-        if !status.is_success() {
-            let text = resp.text().await.unwrap_or_default();
-            return Err(ConnectorError::Upstream(format!(
-                "status {}: {}",
-                status, text
-            )));
+        if req.stream {
+            // Streaming mode (OpenAI-compatible SSE)
+            let response = rb
+                .json(&body)
+                .send()
+                .await
+                .map_err(|e| ConnectorError::Upstream(e.to_string()))?;
+
+            let status = response.status();
+            if !status.is_success() {
+                let text = response.text().await.unwrap_or_default();
+                return Err(ConnectorError::Upstream(format!(
+                    "status {}: {}",
+                    status, text
+                )));
+            }
+
+            let stream =
+                response
+                    .bytes_stream()
+                    .eventsource()
+                    .map(|event_result| match event_result {
+                        Ok(event) => {
+                            let data = event.data;
+                            if data == "[DONE]" {
+                                return Ok(UnifiedChunk {
+                                    text_delta: None,
+                                    tool_call_delta: None,
+                                    done: true,
+                                    provider_events: None,
+                                });
+                            }
+                            let json_val: serde_json::Value =
+                                serde_json::from_str(&data).unwrap_or_default();
+                            let delta = &json_val["choices"][0]["delta"];
+                            let text_delta = delta["content"].as_str().map(String::from);
+                            Ok(UnifiedChunk {
+                                text_delta,
+                                tool_call_delta: None,
+                                done: false,
+                                provider_events: Some(json_val),
+                            })
+                        }
+                        Err(e) => Err(ConnectorError::Upstream(e.to_string())),
+                    });
+
+            Ok(ConnectorResponse::Streaming(Box::pin(stream)))
+        } else {
+            // Non-streaming mode
+            let resp = rb.json(&body).send().await?;
+            let status = resp.status();
+            if !status.is_success() {
+                let text = resp.text().await.unwrap_or_default();
+                return Err(ConnectorError::Upstream(format!(
+                    "status {}: {}",
+                    status, text
+                )));
+            }
+            let v: serde_json::Value = resp.json().await?;
+            let content = v
+                .pointer("/choices/0/message/content")
+                .and_then(|x| x.as_str())
+                .unwrap_or("")
+                .to_string();
+            let chunk = UnifiedChunk {
+                text_delta: Some(content),
+                tool_call_delta: None,
+                done: true,
+                provider_events: Some(v),
+            };
+            Ok(ConnectorResponse::NonStreaming(chunk))
         }
-        let v: serde_json::Value = resp.json().await?;
-        let content = v
-            .pointer("/choices/0/message/content")
-            .and_then(|x| x.as_str())
-            .unwrap_or("")
-            .to_string();
-        let chunk = UnifiedChunk {
-            text_delta: Some(content),
-            tool_call_delta: None,
-            done: true,
-            provider_events: Some(v),
-        };
-        Ok(ConnectorResponse::NonStreaming(chunk))
     }
 }
