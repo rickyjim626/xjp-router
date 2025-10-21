@@ -28,5 +28,15 @@ reqwest-eventsource = "0.5"
 eventsource-stream = "0.2"
 # config
 toml = "0.8"
+# database
+sqlx = { version = "0.7", features = ["runtime-tokio-rustls", "postgres", "uuid", "time", "migrate"] }
+sha2 = "0.10"
+rand = "0.8"
+# rate limiting
+governor = "0.7"
+dashmap = "6.0"
+# metrics
+prometheus = "0.13"
+lazy_static = "1.4"
 
 async-trait = "0.1"

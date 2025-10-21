@@ -12,15 +12,23 @@ pub async fn messages(
     Json(req): Json<crate::api::anthropic_adapter::AnthropicMessagesRequest>,
 ) -> Response {
     // 1) XJPkey 鉴权
-    if let Err(e) = auth::extract_xjpkey(&headers) {
-        return e.into_response();
-    }
+    let raw_key = match auth::extract_xjpkey(&headers) {
+        Ok(key) => key,
+        Err(e) => return e.into_response(),
+    };
 
-    // 2) 适配为 UnifiedRequest
+    // 2) 验证密钥并获取密钥信息
+    let key_store = app.key_store();
+    let _key_info = match auth::verify_key(&*key_store, &raw_key).await {
+        Ok(info) => info,
+        Err(e) => return e.into_response(),
+    };
+
+    // 3) 适配为 UnifiedRequest
     let unified: UnifiedRequest = crate::api::anthropic_adapter::to_unified(req);
     let model_name = unified.logical_model.clone();
 
-    // 3) 调用路由
+    // 4) 调用路由
     match app.invoke(unified).await {
         Ok(crate::connectors::ConnectorResponse::Streaming(stream)) => {
             // 简化的 Anthropic SSE：仅输出 content_block_delta 与最终 message_stop

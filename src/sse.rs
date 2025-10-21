@@ -11,17 +11,15 @@ where
         + Send
         + 'static,
 {
-    let mapped = stream.map(
-        |item| -> Result<Event, std::convert::Infallible> {
-            match item {
-                Ok(chunk) => {
-                    let json = serde_json::to_string(&chunk).unwrap_or("{}".to_string());
-                    Ok(Event::default().data(json))
-                }
-                Err(e) => Ok(Event::default().data(format!(r#"{{"error":"{e}"}}"#))),
+    let mapped = stream.map(|item| -> Result<Event, std::convert::Infallible> {
+        match item {
+            Ok(chunk) => {
+                let json = serde_json::to_string(&chunk).unwrap_or("{}".to_string());
+                Ok(Event::default().data(json))
             }
-        },
-    );
+            Err(e) => Ok(Event::default().data(format!(r#"{{"error":"{e}"}}"#))),
+        }
+    });
     Sse::new(mapped).keep_alive(
         axum::response::sse::KeepAlive::new().interval(std::time::Duration::from_secs(10)),
     )

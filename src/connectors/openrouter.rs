@@ -1,12 +1,11 @@
 use eventsource_stream::Eventsource;
-use futures_util::stream::BoxStream;
-use futures_util::{StreamExt, TryStreamExt};
+use futures_util::StreamExt;
 use reqwest::{header, Client};
 use serde_json::json;
 use std::time::Duration;
 
 use crate::connectors::{Connector, ConnectorCapabilities, ConnectorError, ConnectorResponse};
-use crate::core::entities::{ContentPart, UnifiedChunk, UnifiedMessage, UnifiedRequest};
+use crate::core::entities::{ContentPart, UnifiedChunk, UnifiedRequest};
 use crate::registry::EgressRoute;
 
 pub struct OpenRouterConnector {
@@ -149,33 +148,34 @@ impl Connector for OpenRouterConnector {
                 .await
                 .map_err(|e| ConnectorError::Upstream(e.to_string()))?;
 
-            let stream = response
-                .bytes_stream()
-                .eventsource()
-                .map(|event_result| match event_result {
-                    Ok(event) => {
-                        let data = event.data;
-                        if data == "[DONE]" {
-                            return Ok(UnifiedChunk {
-                                text_delta: None,
+            let stream =
+                response
+                    .bytes_stream()
+                    .eventsource()
+                    .map(|event_result| match event_result {
+                        Ok(event) => {
+                            let data = event.data;
+                            if data == "[DONE]" {
+                                return Ok(UnifiedChunk {
+                                    text_delta: None,
+                                    tool_call_delta: None,
+                                    done: true,
+                                    provider_events: None,
+                                });
+                            }
+                            let json_val: serde_json::Value =
+                                serde_json::from_str(&data).unwrap_or_default();
+                            let delta = &json_val["choices"][0]["delta"];
+                            let text_delta = delta["content"].as_str().map(String::from);
+                            Ok(UnifiedChunk {
+                                text_delta,
                                 tool_call_delta: None,
-                                done: true,
-                                provider_events: None,
-                            });
+                                done: false,
+                                provider_events: Some(json_val),
+                            })
                         }
-                        let json_val: serde_json::Value =
-                            serde_json::from_str(&data).unwrap_or_default();
-                        let delta = &json_val["choices"][0]["delta"];
-                        let text_delta = delta["content"].as_str().map(String::from);
-                        Ok(UnifiedChunk {
-                            text_delta,
-                            tool_call_delta: None,
-                            done: false,
-                            provider_events: Some(json_val),
-                        })
-                    }
-                    Err(e) => Err(ConnectorError::Upstream(e.to_string())),
-                });
+                        Err(e) => Err(ConnectorError::Upstream(e.to_string())),
+                    });
 
             Ok(ConnectorResponse::Streaming(Box::pin(stream)))
         } else {

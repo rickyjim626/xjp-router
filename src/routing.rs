@@ -1,5 +1,6 @@
 use crate::connectors::{self, Connector, ConnectorError, ConnectorResponse};
 use crate::core::entities::UnifiedRequest;
+use crate::db::KeyStore;
 use crate::registry::{ModelRegistry, ProviderKind};
 use std::sync::Arc;
 
@@ -9,16 +10,25 @@ pub struct AppState {
     openrouter: Arc<dyn Connector>,
     vertex: Arc<dyn Connector>,
     clewdr: Arc<dyn Connector>,
+    key_store: Arc<dyn KeyStore>,
 }
 
 impl AppState {
-    pub async fn new(registry: ModelRegistry) -> anyhow::Result<Self> {
+    pub async fn new(
+        registry: ModelRegistry,
+        key_store: Arc<dyn KeyStore>,
+    ) -> anyhow::Result<Self> {
         Ok(Self {
             registry: Arc::new(registry),
             openrouter: Arc::new(connectors::openrouter::OpenRouterConnector::new()?),
             vertex: Arc::new(connectors::vertex::VertexConnector::new().await?),
             clewdr: Arc::new(connectors::clewdr::ClewdrConnector::new()?),
+            key_store,
         })
+    }
+
+    pub fn key_store(&self) -> Arc<dyn KeyStore> {
+        Arc::clone(&self.key_store)
     }
 
     pub async fn invoke(&self, req: UnifiedRequest) -> Result<ConnectorResponse, ConnectorError> {
