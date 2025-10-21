@@ -1,0 +1,14 @@
+# Example routing table for XiaojinPro Gateway
+[models."claude-sonnet-4.5".primary]
+provider = "OpenRouter"
+provider_model_id = "anthropic/claude-3.5-sonnet"
+
+[models."gemini-1.5-pro".primary]
+provider = "Vertex"
+provider_model_id = "publishers/google/models/gemini-1.5-pro-002"
+region = "us-central1"
+project = "your-gcp-project"
+
+[models."my-clewdr-model".primary]
+provider = "Clewdr"
+provider_model_id = "gpt-4o-like"
