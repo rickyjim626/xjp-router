@@ -3,7 +3,7 @@ use serde_json::json;
 use time::OffsetDateTime;
 use uuid::Uuid;
 
-use crate::core::entities::{ContentPart, UnifiedChunk, UnifiedMessage, UnifiedRequest};
+use crate::core::entities::{ContentPart, ToolSpec, UnifiedChunk, UnifiedMessage, UnifiedRequest};
 
 #[derive(Deserialize)]
 pub struct OpenAiChatRequest {
@@ -73,11 +73,37 @@ pub fn to_unified(req: OpenAiChatRequest) -> UnifiedRequest {
         });
     }
 
+    // Convert tools from OpenAI format to ToolSpec
+    let tools = req.tools.map(|tools_arr| {
+        tools_arr
+            .into_iter()
+            .filter_map(|tool| {
+                // OpenAI format: {"type": "function", "function": {...}}
+                if let Some(func) = tool.get("function") {
+                    Some(ToolSpec {
+                        name: func
+                            .get("name")
+                            .and_then(|n| n.as_str())
+                            .unwrap_or("")
+                            .to_string(),
+                        description: func
+                            .get("description")
+                            .and_then(|d| d.as_str())
+                            .map(String::from),
+                        json_schema: func.get("parameters").cloned().unwrap_or(json!({})),
+                    })
+                } else {
+                    None
+                }
+            })
+            .collect()
+    });
+
     UnifiedRequest {
         logical_model: req.model,
         messages,
-        tools: None,
-        tool_choice: None,
+        tools,
+        tool_choice: None, // TODO: handle tool_choice if needed
         max_output_tokens: req.max_tokens,
         temperature: req.temperature,
         top_p: req.top_p,

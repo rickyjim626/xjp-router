@@ -37,7 +37,7 @@ impl Connector for OpenRouterConnector {
             text: true,
             vision: true,
             video: true,
-            tools: false,
+            tools: true,
             stream: true,
         }
     }
@@ -117,6 +117,26 @@ impl Connector for OpenRouterConnector {
         if let Some(t) = req.top_p {
             body["top_p"] = json!(t);
         }
+        // Add tools if present (OpenAI format)
+        if let Some(tools) = &req.tools {
+            let tools_json: Vec<serde_json::Value> = tools
+                .iter()
+                .map(|tool| {
+                    json!({
+                        "type": "function",
+                        "function": {
+                            "name": tool.name,
+                            "description": tool.description,
+                            "parameters": tool.json_schema
+                        }
+                    })
+                })
+                .collect();
+            body["tools"] = json!(tools_json);
+        }
+        if let Some(choice) = &req.tool_choice {
+            body["tool_choice"] = json!(choice);
+        }
         for (k, v) in req
             .extra
             .as_object()
@@ -167,9 +187,13 @@ impl Connector for OpenRouterConnector {
                                 serde_json::from_str(&data).unwrap_or_default();
                             let delta = &json_val["choices"][0]["delta"];
                             let text_delta = delta["content"].as_str().map(String::from);
+
+                            // Check for tool_calls in delta
+                            let tool_call_delta = delta.get("tool_calls").cloned();
+
                             Ok(UnifiedChunk {
                                 text_delta,
-                                tool_call_delta: None,
+                                tool_call_delta,
                                 done: false,
                                 provider_events: Some(json_val),
                             })
@@ -196,9 +220,12 @@ impl Connector for OpenRouterConnector {
                 .unwrap_or("")
                 .to_string();
 
+            // Check for tool_calls in message
+            let tool_call_delta = json.pointer("/choices/0/message/tool_calls").cloned();
+
             let chunk = UnifiedChunk {
-                text_delta: Some(text),
-                tool_call_delta: None,
+                text_delta: if text.is_empty() { None } else { Some(text) },
+                tool_call_delta,
                 done: true,
                 provider_events: Some(json),
             };
