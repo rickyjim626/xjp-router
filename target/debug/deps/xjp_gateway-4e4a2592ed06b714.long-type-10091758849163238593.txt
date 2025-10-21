@@ -1,1 +1,0 @@
-fn(axum::extract::State<AppState>, HeaderMap, axum::Json<AnthropicMessagesRequest>) -> impl futures_util::Future<Output = axum::http::Response<axum::body::Body>> {messages}

@@ -1,11 +1,11 @@
 mod api;
 mod auth;
-mod registry;
 mod connectors;
-mod sse;
 mod core;
-mod routing;
 mod observability;
+mod registry;
+mod routing;
+mod sse;
 
 use axum::{routing::post, Router};
 use std::net::SocketAddr;
@@ -26,9 +26,13 @@ async fn main() -> anyhow::Result<()> {
         .with_state(app_state)
         .layer(tower_http::trace::TraceLayer::new_for_http());
 
-    let port: u16 = std::env::var("PORT").ok().and_then(|p| p.parse().ok()).unwrap_or(8080);
-    let addr = SocketAddr::from(([0,0,0,0], port));
+    let port: u16 = std::env::var("PORT")
+        .ok()
+        .and_then(|p| p.parse().ok())
+        .unwrap_or(8080);
+    let addr = SocketAddr::from(([0, 0, 0, 0], port));
+    let listener = tokio::net::TcpListener::bind(addr).await?;
     tracing::info!("XiaojinPro Gateway listening on {addr}");
-    axum::Server::bind(&addr).serve(app.into_make_service()).await?;
+    axum::serve(listener, app).await?;
     Ok(())
 }

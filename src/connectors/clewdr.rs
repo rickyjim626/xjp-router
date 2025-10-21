@@ -1,10 +1,10 @@
-use std::time::Duration;
-use reqwest::{Client, header};
+use reqwest::{header, Client};
 use serde_json::json;
+use std::time::Duration;
 
-use crate::connectors::{Connector, ConnectorCapabilities, ConnectorResponse, ConnectorError};
+use crate::connectors::{Connector, ConnectorCapabilities, ConnectorError, ConnectorResponse};
+use crate::core::entities::{ContentPart, UnifiedChunk, UnifiedMessage, UnifiedRequest};
 use crate::registry::EgressRoute;
-use crate::core::entities::{UnifiedRequest, UnifiedMessage, ContentPart, UnifiedChunk};
 
 pub struct ClewdrConnector {
     client: Client,
@@ -14,10 +14,17 @@ pub struct ClewdrConnector {
 
 impl ClewdrConnector {
     pub fn new() -> anyhow::Result<Self> {
-        let client = Client::builder().timeout(Duration::from_secs(120)).build()?;
-        let base = std::env::var("CLEWDR_BASE_URL").unwrap_or_else(|_| "http://localhost:9000".to_string());
+        let client = Client::builder()
+            .timeout(Duration::from_secs(120))
+            .build()?;
+        let base = std::env::var("CLEWDR_BASE_URL")
+            .unwrap_or_else(|_| "http://localhost:9000".to_string());
         let api_key = std::env::var("CLEWDR_API_KEY").ok();
-        Ok(Self { client, base, api_key })
+        Ok(Self {
+            client,
+            base,
+            api_key,
+        })
     }
 
     fn map_messages(messages: &[UnifiedMessage]) -> anyhow::Result<Vec<serde_json::Value>> {
@@ -42,25 +49,50 @@ impl ClewdrConnector {
 
 #[async_trait::async_trait]
 impl Connector for ClewdrConnector {
-    fn name(&self) -> &'static str { "clewdr" }
-
-    fn capabilities(&self) -> ConnectorCapabilities {
-        ConnectorCapabilities { text: true, vision: true, video: false, tools: false, stream: false }
+    fn name(&self) -> &'static str {
+        "clewdr"
     }
 
-    async fn invoke(&self, route: &EgressRoute, req: UnifiedRequest) -> Result<ConnectorResponse, ConnectorError> {
+    fn capabilities(&self) -> ConnectorCapabilities {
+        ConnectorCapabilities {
+            text: true,
+            vision: true,
+            video: false,
+            tools: false,
+            stream: false,
+        }
+    }
+
+    async fn invoke(
+        &self,
+        route: &EgressRoute,
+        req: UnifiedRequest,
+    ) -> Result<ConnectorResponse, ConnectorError> {
         let url = format!("{}/v1/chat/completions", self.base);
         let mut body = json!({
             "model": route.provider_model_id,
             "messages": Self::map_messages(&req.messages).map_err(|e| ConnectorError::Invalid(e.to_string()))?,
             "stream": false
         });
-        if let Some(t) = req.max_output_tokens { body["max_tokens"] = json!(t); }
-        if let Some(t) = req.temperature { body["temperature"] = json!(t); }
-        if let Some(t) = req.top_p { body["top_p"] = json!(t); }
+        if let Some(t) = req.max_output_tokens {
+            body["max_tokens"] = json!(t);
+        }
+        if let Some(t) = req.temperature {
+            body["temperature"] = json!(t);
+        }
+        if let Some(t) = req.top_p {
+            body["top_p"] = json!(t);
+        }
 
-        let mut rb = self.client.post(&url).header(header::CONTENT_TYPE, "application/json");
-        if let Some(k) = self.api_key.clone().or_else(|| std::env::var("CLEWDR_API_KEY").ok()) {
+        let mut rb = self
+            .client
+            .post(&url)
+            .header(header::CONTENT_TYPE, "application/json");
+        if let Some(k) = self
+            .api_key
+            .clone()
+            .or_else(|| std::env::var("CLEWDR_API_KEY").ok())
+        {
             rb = rb.bearer_auth(k);
         }
 
@@ -68,11 +100,23 @@ impl Connector for ClewdrConnector {
         let status = resp.status();
         if !status.is_success() {
             let text = resp.text().await.unwrap_or_default();
-            return Err(ConnectorError::Upstream(format!("status {}: {}", status, text)));
+            return Err(ConnectorError::Upstream(format!(
+                "status {}: {}",
+                status, text
+            )));
         }
         let v: serde_json::Value = resp.json().await?;
-        let content = v.pointer("/choices/0/message/content").and_then(|x| x.as_str()).unwrap_or("").to_string();
-        let chunk = UnifiedChunk { text_delta: Some(content), tool_call_delta: None, done: true, provider_events: Some(v) };
+        let content = v
+            .pointer("/choices/0/message/content")
+            .and_then(|x| x.as_str())
+            .unwrap_or("")
+            .to_string();
+        let chunk = UnifiedChunk {
+            text_delta: Some(content),
+            tool_call_delta: None,
+            done: true,
+            provider_events: Some(v),
+        };
         Ok(ConnectorResponse::NonStreaming(chunk))
     }
 }

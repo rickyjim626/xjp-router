@@ -1,8 +1,9 @@
-use std::sync::Arc;
-use crate::registry::{ModelRegistry, EgressRoute, ProviderKind};
-use crate::connectors::{self, Connector, ConnectorResponse, ConnectorError};
+use crate::connectors::{self, Connector, ConnectorError, ConnectorResponse};
 use crate::core::entities::UnifiedRequest;
+use crate::registry::{ModelRegistry, ProviderKind};
+use std::sync::Arc;
 
+#[derive(Clone)]
 pub struct AppState {
     registry: Arc<ModelRegistry>,
     openrouter: Arc<dyn Connector>,
@@ -21,7 +22,9 @@ impl AppState {
     }
 
     pub async fn invoke(&self, req: UnifiedRequest) -> Result<ConnectorResponse, ConnectorError> {
-        let route = self.registry.resolve(&req.logical_model)
+        let route = self
+            .registry
+            .resolve(&req.logical_model)
             .map_err(|e| ConnectorError::Invalid(e.to_string()))?;
         let connector: &Arc<dyn Connector> = match route.provider {
             ProviderKind::OpenRouter => &self.openrouter,

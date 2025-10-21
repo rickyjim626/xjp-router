@@ -1,5 +1,9 @@
-use axum::{http::HeaderMap, response::{IntoResponse, Response}, Json};
 use axum::http::StatusCode;
+use axum::{
+    http::HeaderMap,
+    response::{IntoResponse, Response},
+    Json,
+};
 
 #[derive(thiserror::Error, Debug)]
 pub enum AuthError {

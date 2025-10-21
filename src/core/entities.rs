@@ -6,11 +6,19 @@ pub enum ContentPart {
     #[serde(rename = "text")]
     Text { text: String },
     #[serde(rename = "image_url")]
-    ImageUrl { url: String, #[serde(default)] mime: Option<String> },
+    ImageUrl {
+        url: String,
+        #[serde(default)]
+        mime: Option<String>,
+    },
     #[serde(rename = "image_b64")]
     ImageB64 { b64: String, mime: String },
     #[serde(rename = "video_url")]
-    VideoUrl { url: String, #[serde(default)] mime: Option<String> },
+    VideoUrl {
+        url: String,
+        #[serde(default)]
+        mime: Option<String>,
+    },
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]

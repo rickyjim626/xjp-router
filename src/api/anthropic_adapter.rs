@@ -1,8 +1,8 @@
-use serde::{Deserialize, Serialize};
+use serde::Deserialize;
 use serde_json::json;
 use uuid::Uuid;
 
-use crate::core::entities::{UnifiedMessage, ContentPart, UnifiedRequest, UnifiedChunk};
+use crate::core::entities::{ContentPart, UnifiedChunk, UnifiedMessage, UnifiedRequest};
 
 #[derive(Deserialize)]
 pub struct AnthropicMessagesRequest {
@@ -25,10 +25,18 @@ pub struct AnthropicMessagesRequest {
 pub fn to_unified(req: AnthropicMessagesRequest) -> UnifiedRequest {
     let mut messages = Vec::new();
     if let Some(sys) = req.system {
-        messages.push(UnifiedMessage { role: "system".into(), content: vec![ContentPart::Text { text: sys }], name: None });
+        messages.push(UnifiedMessage {
+            role: "system".into(),
+            content: vec![ContentPart::Text { text: sys }],
+            name: None,
+        });
     }
     for m in req.messages {
-        let role = m.get("role").and_then(|x| x.as_str()).unwrap_or("user").to_string();
+        let role = m
+            .get("role")
+            .and_then(|x| x.as_str())
+            .unwrap_or("user")
+            .to_string();
         let content = m.get("content").cloned().unwrap_or(json!(""));
         let mut parts = Vec::new();
         match content {
@@ -38,14 +46,20 @@ pub fn to_unified(req: AnthropicMessagesRequest) -> UnifiedRequest {
                     let t = c.get("type").and_then(|x| x.as_str()).unwrap_or("text");
                     if t == "text" {
                         if let Some(txt) = c.get("text").and_then(|x| x.as_str()) {
-                            parts.push(ContentPart::Text { text: txt.to_string() });
+                            parts.push(ContentPart::Text {
+                                text: txt.to_string(),
+                            });
                         }
                     }
                 }
             }
             _ => {}
         }
-        messages.push(UnifiedMessage { role, content: parts, name: None });
+        messages.push(UnifiedMessage {
+            role,
+            content: parts,
+            name: None,
+        });
     }
 
     UnifiedRequest {

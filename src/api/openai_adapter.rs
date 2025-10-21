@@ -3,7 +3,7 @@ use serde_json::json;
 use time::OffsetDateTime;
 use uuid::Uuid;
 
-use crate::core::entities::{UnifiedMessage, ContentPart, UnifiedRequest, UnifiedChunk};
+use crate::core::entities::{ContentPart, UnifiedChunk, UnifiedMessage, UnifiedRequest};
 
 #[derive(Deserialize)]
 pub struct OpenAiChatRequest {
@@ -26,7 +26,11 @@ pub struct OpenAiChatRequest {
 pub fn to_unified(req: OpenAiChatRequest) -> UnifiedRequest {
     let mut messages = Vec::new();
     for m in req.messages {
-        let role = m.get("role").and_then(|x| x.as_str()).unwrap_or("user").to_string();
+        let role = m
+            .get("role")
+            .and_then(|x| x.as_str())
+            .unwrap_or("user")
+            .to_string();
         let content = m.get("content").cloned().unwrap_or(json!(""));
         let mut parts = Vec::new();
         match content {
@@ -39,12 +43,21 @@ pub fn to_unified(req: OpenAiChatRequest) -> UnifiedRequest {
                     match t {
                         "text" => {
                             if let Some(txt) = c.get("text").and_then(|x| x.as_str()) {
-                                parts.push(ContentPart::Text { text: txt.to_string() });
+                                parts.push(ContentPart::Text {
+                                    text: txt.to_string(),
+                                });
                             }
                         }
                         "image_url" => {
-                            if let Some(u) = c.get("image_url").and_then(|x| x.get("url")).and_then(|x| x.as_str()) {
-                                parts.push(ContentPart::ImageUrl { url: u.to_string(), mime: None });
+                            if let Some(u) = c
+                                .get("image_url")
+                                .and_then(|x| x.get("url"))
+                                .and_then(|x| x.as_str())
+                            {
+                                parts.push(ContentPart::ImageUrl {
+                                    url: u.to_string(),
+                                    mime: None,
+                                });
                             }
                         }
                         _ => {}
@@ -53,7 +66,11 @@ pub fn to_unified(req: OpenAiChatRequest) -> UnifiedRequest {
             }
             _ => {}
         }
-        messages.push(UnifiedMessage { role, content: parts, name: None });
+        messages.push(UnifiedMessage {
+            role,
+            content: parts,
+            name: None,
+        });
     }
 
     UnifiedRequest {
@@ -99,10 +116,23 @@ pub fn from_unified_chunk(model: &str, chunk: UnifiedChunk) -> serde_json::Value
         role: None,
         content: chunk.text_delta.clone(),
     };
-    let choice = OpenAiChoiceDelta { index: 0, delta, finish_reason: if chunk.done { Some("stop".into()) } else { None } };
+    let choice = OpenAiChoiceDelta {
+        index: 0,
+        delta,
+        finish_reason: if chunk.done {
+            Some("stop".into())
+        } else {
+            None
+        },
+    };
     serde_json::to_value(OpenAiStreamChunk {
-        id, object: "chat.completion.chunk".into(), created, model: model.into(), choices: vec![choice]
-    }).unwrap()
+        id,
+        object: "chat.completion.chunk".into(),
+        created,
+        model: model.into(),
+        choices: vec![choice],
+    })
+    .unwrap()
 }
 
 pub fn from_unified_final(model: &str, chunk: UnifiedChunk) -> serde_json::Value {

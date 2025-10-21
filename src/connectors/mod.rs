@@ -1,12 +1,12 @@
 use futures_util::stream::BoxStream;
 use thiserror::Error;
 
+pub mod clewdr;
 pub mod openrouter;
 pub mod vertex;
-pub mod clewdr;
 
-use crate::registry::EgressRoute;
 use crate::core::entities::{UnifiedChunk, UnifiedRequest};
+use crate::registry::EgressRoute;
 
 #[derive(Clone, Debug)]
 pub struct ConnectorCapabilities {
@@ -21,7 +21,11 @@ pub struct ConnectorCapabilities {
 pub trait Connector: Send + Sync {
     fn name(&self) -> &'static str;
     fn capabilities(&self) -> ConnectorCapabilities;
-    async fn invoke(&self, route: &EgressRoute, req: UnifiedRequest) -> Result<ConnectorResponse, ConnectorError>;
+    async fn invoke(
+        &self,
+        route: &EgressRoute,
+        req: UnifiedRequest,
+    ) -> Result<ConnectorResponse, ConnectorError>;
 }
 
 pub enum ConnectorResponse {
@@ -47,12 +51,18 @@ pub enum ConnectorError {
 
 impl From<reqwest::Error> for ConnectorError {
     fn from(e: reqwest::Error) -> Self {
-        if e.is_timeout() { ConnectorError::Timeout } else { ConnectorError::Upstream(e.to_string()) }
+        if e.is_timeout() {
+            ConnectorError::Timeout
+        } else {
+            ConnectorError::Upstream(e.to_string())
+        }
     }
 }
 
 impl From<anyhow::Error> for ConnectorError {
-    fn from(e: anyhow::Error) -> Self { ConnectorError::Internal(e.to_string()) }
+    fn from(e: anyhow::Error) -> Self {
+        ConnectorError::Internal(e.to_string())
+    }
 }
 
 impl axum::response::IntoResponse for ConnectorError {

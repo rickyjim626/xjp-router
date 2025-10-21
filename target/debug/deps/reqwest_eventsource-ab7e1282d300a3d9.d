@@ -1,9 +1,0 @@
-/Users/jinchen/Downloads/xiaojinpro-gateway/services/xjp-router/target/debug/deps/libreqwest_eventsource-ab7e1282d300a3d9.rmeta: /Users/jinchen/.cargo/registry/src/index.crates.io-6f17d22bba15001f/reqwest-eventsource-0.5.0/src/lib.rs /Users/jinchen/.cargo/registry/src/index.crates.io-6f17d22bba15001f/reqwest-eventsource-0.5.0/src/error.rs /Users/jinchen/.cargo/registry/src/index.crates.io-6f17d22bba15001f/reqwest-eventsource-0.5.0/src/event_source.rs /Users/jinchen/.cargo/registry/src/index.crates.io-6f17d22bba15001f/reqwest-eventsource-0.5.0/src/reqwest_ext.rs /Users/jinchen/.cargo/registry/src/index.crates.io-6f17d22bba15001f/reqwest-eventsource-0.5.0/src/retry.rs
-
-/Users/jinchen/Downloads/xiaojinpro-gateway/services/xjp-router/target/debug/deps/reqwest_eventsource-ab7e1282d300a3d9.d: /Users/jinchen/.cargo/registry/src/index.crates.io-6f17d22bba15001f/reqwest-eventsource-0.5.0/src/lib.rs /Users/jinchen/.cargo/registry/src/index.crates.io-6f17d22bba15001f/reqwest-eventsource-0.5.0/src/error.rs /Users/jinchen/.cargo/registry/src/index.crates.io-6f17d22bba15001f/reqwest-eventsource-0.5.0/src/event_source.rs /Users/jinchen/.cargo/registry/src/index.crates.io-6f17d22bba15001f/reqwest-eventsource-0.5.0/src/reqwest_ext.rs /Users/jinchen/.cargo/registry/src/index.crates.io-6f17d22bba15001f/reqwest-eventsource-0.5.0/src/retry.rs
-
-/Users/jinchen/.cargo/registry/src/index.crates.io-6f17d22bba15001f/reqwest-eventsource-0.5.0/src/lib.rs:
-/Users/jinchen/.cargo/registry/src/index.crates.io-6f17d22bba15001f/reqwest-eventsource-0.5.0/src/error.rs:
-/Users/jinchen/.cargo/registry/src/index.crates.io-6f17d22bba15001f/reqwest-eventsource-0.5.0/src/event_source.rs:
-/Users/jinchen/.cargo/registry/src/index.crates.io-6f17d22bba15001f/reqwest-eventsource-0.5.0/src/reqwest_ext.rs:
-/Users/jinchen/.cargo/registry/src/index.crates.io-6f17d22bba15001f/reqwest-eventsource-0.5.0/src/retry.rs:

@@ -1,6 +1,10 @@
-use axum::{extract::State, Json, response::{IntoResponse, Response}};
+use crate::{auth, core::entities::UnifiedRequest, routing::AppState};
+use axum::{
+    extract::State,
+    response::{IntoResponse, Response},
+    Json,
+};
 use futures_util::StreamExt;
-use crate::{routing::AppState, auth, core::entities::UnifiedRequest};
 
 pub async fn messages(
     State(app): State<AppState>,
@@ -8,7 +12,9 @@ pub async fn messages(
     Json(req): Json<crate::api::anthropic_adapter::AnthropicMessagesRequest>,
 ) -> Response {
     // 1) XJPkey 鉴权
-    if let Err(e) = auth::extract_xjpkey(&headers) { return e.into_response(); }
+    if let Err(e) = auth::extract_xjpkey(&headers) {
+        return e.into_response();
+    }
 
     // 2) 适配为 UnifiedRequest
     let unified: UnifiedRequest = crate::api::anthropic_adapter::to_unified(req);
@@ -19,33 +25,42 @@ pub async fn messages(
         Ok(crate::connectors::ConnectorResponse::Streaming(stream)) => {
             // 简化的 Anthropic SSE：仅输出 content_block_delta 与最终 message_stop
             let mut started = false;
-            let mapped = stream.map(move |item| {
-                match item {
-                    Ok(chunk) => {
-                        let mut ev = axum::response::sse::Event::default();
-                        if !started {
-                            started = true;
-                            ev = ev.event("message_start").data("{}");
-                            return Ok(ev);
+            let mapped = stream.map(
+                move |item| -> Result<axum::response::sse::Event, std::convert::Infallible> {
+                    match item {
+                        Ok(chunk) => {
+                            let mut ev = axum::response::sse::Event::default();
+                            if !started {
+                                started = true;
+                                ev = ev.event("message_start").data("{}");
+                                return Ok(ev);
+                            }
+                            if let Some(txt) = chunk.text_delta {
+                                let data = serde_json::json!({
+                                    "type":"content_block_delta",
+                                    "delta":{"type":"text_delta","text": txt},
+                                    "index":0
+                                })
+                                .to_string();
+                                Ok(axum::response::sse::Event::default()
+                                    .event("content_block_delta")
+                                    .data(data))
+                            } else if chunk.done {
+                                Ok(axum::response::sse::Event::default()
+                                    .event("message_stop")
+                                    .data("{}"))
+                            } else {
+                                Ok(axum::response::sse::Event::default()
+                                    .event("ping")
+                                    .data("{}"))
+                            }
                         }
-                        if let Some(txt) = chunk.text_delta {
-                            let data = serde_json::json!({
-                                "type":"content_block_delta",
-                                "delta":{"type":"text_delta","text": txt},
-                                "index":0
-                            }).to_string();
-                            Ok(axum::response::sse::Event::default().event("content_block_delta").data(data))
-                        } else if chunk.done {
-                            Ok(axum::response::sse::Event::default().event("message_stop").data("{}"))
-                        } else {
-                            Ok(axum::response::sse::Event::default().event("ping").data("{}"))
-                        }
+                        Err(e) => Ok(axum::response::sse::Event::default()
+                            .event("error")
+                            .data(e.to_string())),
                     }
-                    Err(e) => {
-                        Ok(axum::response::sse::Event::default().event("error").data(e.to_string()))
-                    }
-                }
-            });
+                },
+            );
             axum::response::Sse::new(mapped).into_response()
         }
         Ok(crate::connectors::ConnectorResponse::NonStreaming(chunk)) => {
