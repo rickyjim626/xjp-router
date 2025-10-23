@@ -1,5 +1,6 @@
 mod api;
 mod auth;
+mod billing;
 mod connectors;
 mod core;
 mod db;
@@ -118,17 +119,24 @@ async fn main() -> anyhow::Result<()> {
     // Create KeyStore instance
     let key_store: Arc<dyn db::KeyStore> = Arc::new(db::PgKeyStore::new(pool.clone()));
 
+    // Create BillingStore instance
+    let billing_store: Arc<dyn db::BillingStore> = Arc::new(db::PgBillingStore::new(pool.clone()));
+
     let app_state = routing::AppState::new(
         registry,
         key_store,
         secret_provider,
         preloaded_secrets,
+        billing_store,
     )
     .await?;
 
     let app = Router::new()
         .route("/v1/chat/completions", post(api::openai::chat_completions))
         .route("/v1/messages", post(api::anthropic::messages))
+        .route("/internal/billing/quote", post(api::billing::quote))
+        .route("/internal/billing/transactions", axum::routing::get(api::billing::get_transactions))
+        .route("/internal/billing/summary", axum::routing::get(api::billing::get_summary))
         .route("/healthz", axum::routing::get(|| async { "ok" }))
         .route("/metrics", axum::routing::get(metrics::metrics_handler))
         .with_state(app_state)

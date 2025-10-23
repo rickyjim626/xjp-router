@@ -19,7 +19,7 @@ pub async fn messages(
 
     // 2) 验证密钥并获取密钥信息
     let key_store = app.key_store();
-    let _key_info = match auth::verify_key(&*key_store, &raw_key).await {
+    let key_info = match auth::verify_key(&*key_store, &raw_key).await {
         Ok(info) => info,
         Err(e) => return e.into_response(),
     };
@@ -28,8 +28,8 @@ pub async fn messages(
     let unified: UnifiedRequest = crate::api::anthropic_adapter::to_unified(req);
     let model_name = unified.logical_model.clone();
 
-    // 4) 调用路由
-    match app.invoke(unified).await {
+    // 4) 调用路由（with billing tracking）
+    match app.invoke_with_billing(unified, key_info.tenant_id.clone(), key_info.id).await {
         Ok(crate::connectors::ConnectorResponse::Streaming(stream)) => {
             // 简化的 Anthropic SSE：仅输出 content_block_delta 与最终 message_stop
             let mut started = false;

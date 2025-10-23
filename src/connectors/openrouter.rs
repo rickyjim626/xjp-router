@@ -133,6 +133,7 @@ impl Connector for OpenRouterConnector {
             "model": route.provider_model_id,
             "messages": messages,
             "stream": req.stream,
+            "usage": {"include": true}
         });
         if let Some(t) = req.max_output_tokens {
             body["max_tokens"] = json!(t);

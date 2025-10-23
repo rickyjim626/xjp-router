@@ -89,6 +89,9 @@ export CLEWDR_API_KEY=optional
 
 # 日志级别
 export RUST_LOG=info,xjp_gateway=debug
+
+# Billing (Optional - for cost tracking)
+export OPENROUTER_API_KEY=sk-or-...  # Required for dynamic pricing
 ```
 
 ### 使用示例
@@ -269,6 +272,7 @@ cargo fmt
 
 - [实施计划](./IMPLEMENTATION_PLAN.md) - 完整的开发路线图 (15-29天)
 - [开发状态](./DEVELOPMENT_STATUS.md) - 当前进度与待办事项
+- [计费 API 使用指南](./docs/BILLING_API_USAGE.md) - 动态定价与成本计算
 - [API 文档](./docs/API.md) - 待创建
 - [贡献指南](./CONTRIBUTING.md) - 待创建
 

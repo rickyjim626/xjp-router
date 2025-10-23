@@ -45,3 +45,6 @@ secret-store-sdk = "0.1.2"
 secrecy = { version = "0.8", features = ["serde"] }
 # CLI tool
 clap = { version = "4", features = ["derive", "env"] }
+# Billing tokenizers
+claude-tokenizer = "0.3"
+tiktoken-rs = "0.7"
