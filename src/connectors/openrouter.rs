@@ -2,26 +2,54 @@ use eventsource_stream::Eventsource;
 use futures_util::StreamExt;
 use reqwest::{header, Client};
 use serde_json::json;
+use std::collections::HashMap;
+use std::sync::Arc;
 use std::time::Duration;
 
 use crate::connectors::{Connector, ConnectorCapabilities, ConnectorError, ConnectorResponse};
 use crate::core::entities::{ContentPart, UnifiedChunk, UnifiedRequest};
 use crate::registry::EgressRoute;
+use crate::secret_store::SecretProvider;
 
 pub struct OpenRouterConnector {
     client: Client,
     api_key: Option<String>,
+    base_url: String,
 }
 
 impl OpenRouterConnector {
-    pub fn new() -> Result<Self, ConnectorError> {
+    pub fn new(
+        _secret_provider: Arc<dyn SecretProvider>,
+        preloaded_secrets: &HashMap<String, String>,
+    ) -> Result<Self, ConnectorError> {
         let client = Client::builder()
             .timeout(Duration::from_secs(120))
             .build()
             .map_err(|e| ConnectorError::Internal(e.to_string()))?;
+
+        // Get API key from preloaded secrets or environment
+        let api_key = preloaded_secrets
+            .get("providers/openrouter/api-key")
+            .cloned()
+            .or_else(|| std::env::var("OPENROUTER_API_KEY").ok());
+
+        if api_key.is_none() {
+            tracing::warn!("OpenRouter API key not found in preloaded secrets or environment");
+        } else {
+            tracing::info!("OpenRouter connector initialized with API key");
+        }
+
+        // Get base URL (optional, has default)
+        let base_url = preloaded_secrets
+            .get("providers/openrouter/base-url")
+            .cloned()
+            .or_else(|| std::env::var("OPENROUTER_BASE_URL").ok())
+            .unwrap_or_else(|| "https://openrouter.ai/api/v1".to_string());
+
         Ok(Self {
             client,
-            api_key: std::env::var("OPENROUTER_API_KEY").ok(),
+            api_key,
+            base_url,
         })
     }
 }
@@ -47,9 +75,7 @@ impl Connector for OpenRouterConnector {
         route: &EgressRoute,
         req: UnifiedRequest,
     ) -> Result<ConnectorResponse, ConnectorError> {
-        let base_url = std::env::var("OPENROUTER_BASE_URL")
-            .unwrap_or_else(|_| "https://openrouter.ai/api/v1".to_string());
-        let url = format!("{}/chat/completions", base_url);
+        let url = format!("{}/chat/completions", self.base_url);
 
         // 转换消息
         let messages: Vec<serde_json::Value> = req
@@ -151,14 +177,10 @@ impl Connector for OpenRouterConnector {
             .post(&url)
             .header(header::CONTENT_TYPE, "application/json");
 
-        if let Some(k) = self
-            .api_key
-            .clone()
-            .or_else(|| std::env::var("OPENROUTER_API_KEY").ok())
-        {
+        if let Some(k) = &self.api_key {
             rb = rb.bearer_auth(k);
         } else {
-            return Err(ConnectorError::Auth("missing OPENROUTER_API_KEY".into()));
+            return Err(ConnectorError::Auth("OpenRouter API key not configured".into()));
         }
 
         if req.stream {

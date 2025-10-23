@@ -2,6 +2,8 @@ use crate::connectors::{self, Connector, ConnectorError, ConnectorResponse};
 use crate::core::entities::UnifiedRequest;
 use crate::db::KeyStore;
 use crate::registry::{ModelRegistry, ProviderKind};
+use crate::secret_store::SecretProvider;
+use std::collections::HashMap;
 use std::sync::Arc;
 
 #[derive(Clone)]
@@ -17,12 +19,23 @@ impl AppState {
     pub async fn new(
         registry: ModelRegistry,
         key_store: Arc<dyn KeyStore>,
+        secret_provider: Arc<dyn SecretProvider>,
+        preloaded_secrets: HashMap<String, String>,
     ) -> anyhow::Result<Self> {
         Ok(Self {
             registry: Arc::new(registry),
-            openrouter: Arc::new(connectors::openrouter::OpenRouterConnector::new()?),
-            vertex: Arc::new(connectors::vertex::VertexConnector::new().await?),
-            clewdr: Arc::new(connectors::clewdr::ClewdrConnector::new()?),
+            openrouter: Arc::new(connectors::openrouter::OpenRouterConnector::new(
+                secret_provider.clone(),
+                &preloaded_secrets,
+            )?),
+            vertex: Arc::new(connectors::vertex::VertexConnector::new(
+                secret_provider.clone(),
+                &preloaded_secrets,
+            ).await?),
+            clewdr: Arc::new(connectors::clewdr::ClewdrConnector::new(
+                secret_provider,
+                &preloaded_secrets,
+            )?),
             key_store,
         })
     }

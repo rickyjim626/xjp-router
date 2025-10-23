@@ -1,4 +1,25 @@
 # Example routing table for XiaojinPro Gateway
+
+# Secret Store Configuration (optional but recommended)
+[secret_store]
+enabled = false  # Set to true to enable secret-store integration
+base_url = "https://kskxndnvmqwr.sg-members-1.clawcloudrun.com"
+namespace = "router"
+cache_ttl_secs = 300  # Cache secrets for 5 minutes
+retries = 3  # Number of retry attempts
+timeout_ms = 10000  # Request timeout in milliseconds
+preload = true  # Preload secrets at startup
+preload_keys = [
+    "providers/openrouter/api-key",
+    "providers/vertex/api-key",
+    "providers/vertex/access-token",
+    "providers/vertex/project",
+    "providers/vertex/region",
+    "providers/clewdr/api-key",
+    "infrastructure/database-url"
+]
+
+# Model Routing Configuration
 [models."claude-sonnet-4.5".primary]
 provider = "OpenRouter"
 provider_model_id = "anthropic/claude-3.5-sonnet"

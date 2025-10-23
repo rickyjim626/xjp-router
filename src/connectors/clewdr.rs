@@ -2,11 +2,14 @@ use eventsource_stream::Eventsource;
 use futures_util::StreamExt;
 use reqwest::{header, Client};
 use serde_json::json;
+use std::collections::HashMap;
+use std::sync::Arc;
 use std::time::Duration;
 
 use crate::connectors::{Connector, ConnectorCapabilities, ConnectorError, ConnectorResponse};
 use crate::core::entities::{ContentPart, UnifiedChunk, UnifiedMessage, UnifiedRequest};
 use crate::registry::EgressRoute;
+use crate::secret_store::SecretProvider;
 
 pub struct ClewdrConnector {
     client: Client,
@@ -15,13 +18,33 @@ pub struct ClewdrConnector {
 }
 
 impl ClewdrConnector {
-    pub fn new() -> anyhow::Result<Self> {
+    pub fn new(
+        _secret_provider: Arc<dyn SecretProvider>,
+        preloaded_secrets: &HashMap<String, String>,
+    ) -> anyhow::Result<Self> {
         let client = Client::builder()
             .timeout(Duration::from_secs(120))
             .build()?;
-        let base = std::env::var("CLEWDR_BASE_URL")
-            .unwrap_or_else(|_| "http://localhost:9000".to_string());
-        let api_key = std::env::var("CLEWDR_API_KEY").ok();
+
+        // Get base URL from preloaded secrets or environment
+        let base = preloaded_secrets
+            .get("providers/clewdr/base-url")
+            .cloned()
+            .or_else(|| std::env::var("CLEWDR_BASE_URL").ok())
+            .unwrap_or_else(|| "http://localhost:9000".to_string());
+
+        // Get API key from preloaded secrets or environment
+        let api_key = preloaded_secrets
+            .get("providers/clewdr/api-key")
+            .cloned()
+            .or_else(|| std::env::var("CLEWDR_API_KEY").ok());
+
+        if api_key.is_none() {
+            tracing::info!("Clewdr connector initialized without API key (optional)");
+        } else {
+            tracing::info!("Clewdr connector initialized with API key");
+        }
+
         Ok(Self {
             client,
             base,
@@ -90,11 +113,8 @@ impl Connector for ClewdrConnector {
             .client
             .post(&url)
             .header(header::CONTENT_TYPE, "application/json");
-        if let Some(k) = self
-            .api_key
-            .clone()
-            .or_else(|| std::env::var("CLEWDR_API_KEY").ok())
-        {
+
+        if let Some(k) = &self.api_key {
             rb = rb.bearer_auth(k);
         }
 

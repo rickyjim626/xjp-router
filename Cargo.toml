@@ -40,3 +40,8 @@ prometheus = "0.13"
 lazy_static = "1.4"
 
 async-trait = "0.1"
+# secret store SDK
+secret-store-sdk = "0.1.2"
+secrecy = { version = "0.8", features = ["serde"] }
+# CLI tool
+clap = { version = "4", features = ["derive", "env"] }

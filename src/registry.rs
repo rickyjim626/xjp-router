@@ -1,5 +1,6 @@
 use serde::Deserialize;
 use std::collections::HashMap;
+use crate::secret_store::SecretStoreConfig;
 
 #[derive(Clone, Debug, Deserialize)]
 pub enum ProviderKind {
@@ -25,6 +26,7 @@ pub struct EgressRoute {
 #[derive(Default, Clone)]
 pub struct ModelRegistry {
     routes: HashMap<String, Vec<EgressRoute>>,
+    pub secret_store_config: SecretStoreConfig,
 }
 
 impl ModelRegistry {
@@ -45,6 +47,8 @@ struct FileModel {
 struct FileConfig {
     #[serde(rename = "models")]
     models: HashMap<String, FileModel>,
+    #[serde(default)]
+    secret_store: SecretStoreConfig,
 }
 
 pub async fn load_from_toml(path: &str) -> anyhow::Result<ModelRegistry> {
@@ -57,5 +61,8 @@ pub async fn load_from_toml(path: &str) -> anyhow::Result<ModelRegistry> {
     for (k, v) in cfg.models.into_iter() {
         map.insert(k, vec![v.primary]);
     }
-    Ok(ModelRegistry { routes: map })
+    Ok(ModelRegistry {
+        routes: map,
+        secret_store_config: cfg.secret_store,
+    })
 }
